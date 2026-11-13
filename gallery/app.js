@@ -3,11 +3,20 @@
 
 import { effects, categories } from "../src/fx/index.js";
 import { createFrame, clearFrame, createFx, createAct, actBounds, composite, backdrop, drawActor, painterFor, stockActor, actorAlphaOf, PAL, BACKDROPS } from "../src/core/index.js";
+import { i18n, t, LANGUAGES } from "./i18n.js";
 
 const REPO = "https://github.com/patch-gg/pixelfx";
+/** Clipboard confirmation duration, independent of the selected language. */
+const COPY_FEEDBACK_MS = 1400;
+/** Display metadata plus bilingual search text; localization never mutates effect modules. */
 const FX = Object.entries(effects).map(([id, mod]) => {
   const meta = { fps: 30, bg: "dark", loop: false, duration: 1, tags: [], options: {}, ...mod.meta };
-  return { id, cat: id.split("/")[0], name: meta.name, mod: { ...mod, meta }, meta };
+  const cat = id.split("/")[0];
+  const search = [id, ...meta.tags, ...LANGUAGES.flatMap(({ code }) => {
+    const tr = i18n.getFixedT(code);
+    return [tr(`effects.${id}.name`), tr(`effects.${id}.desc`), tr(`categories.${cat}.name`), tr(meta.loop ? "loop" : "oneShot")];
+  })].join(" ").toLowerCase();
+  return { id, cat, name: meta.name, search, mod: { ...mod, meta }, meta };
 });
 const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
 // full-screen effects (transitions, weather, impact frames) fill a 16:9 stage edge to edge instead of floating in it
@@ -108,7 +117,6 @@ class Player {
 const tiles = [];
 const sections = [];
 function build() {
-  $("#count").textContent = FX.length;
   const main = $("#grid");
   for (const c of categories) {
     const list = FX.filter((f) => f.cat === c.id);
@@ -156,8 +164,9 @@ function chips() {
     b.addEventListener("click", () => setCat(id));
     box.append(b);
   };
-  mk("all", "all", FX.length);
-  for (const s of sections) mk(s.c.id, s.c.name, s.list.length);
+  box.replaceChildren();
+  mk("all", t("all"), FX.length);
+  for (const s of sections) mk(s.c.id, t(`categories.${s.c.id}.name`), s.list.length);
 }
 function setCat(id, fromHash = false) {
   state.cat = sections.some((s) => s.c.id === id) ? id : "all";
@@ -173,7 +182,7 @@ function filter() {
     let any = false;
     for (const fx of s.list) {
       const t = tiles.find((x) => x.fx === fx);
-      const hit = (state.cat === "all" || state.cat === s.c.id) && (!q || [fx.id, fx.name, fx.meta.desc, ...fx.meta.tags].join(" ").toLowerCase().includes(q));
+      const hit = (state.cat === "all" || state.cat === s.c.id) && (!q || fx.search.includes(q));
       t.fig.hidden = !hit;
       any ||= hit;
       shown += hit;
@@ -185,46 +194,90 @@ function filter() {
 
 // ---- detail
 let detail = null;
+/**
+ * Update all visible copy in place, preserving players, filters, options and generated sprite sheets.
+ * Uses plain text/attributes so translation strings cannot inject HTML.
+ */
+function renderLanguage() {
+  document.documentElement.lang = LANGUAGES.find(({ code }) => code === i18n.language).htmlLang;
+  document.querySelectorAll("[data-i18n]").forEach((node) => {
+    node.textContent = t(node.dataset.i18n, { count: FX.length });
+  });
+  for (const attr of ["placeholder", "aria-label", "content"]) {
+    document.querySelectorAll(`[data-i18n-${attr}]`).forEach((node) => node.setAttribute(attr, t(node.getAttribute(`data-i18n-${attr}`))));
+  }
+  document.querySelectorAll("[data-language]").forEach((select) => { select.value = i18n.language; });
+  for (const { c, sec } of sections) {
+    sec.querySelector("h2").textContent = t(`categories.${c.id}.name`) + ".";
+    sec.querySelector(".section-head p").textContent = t(`categories.${c.id}.blurb`);
+  }
+  for (const { fx, fig, cv } of tiles) {
+    const name = t(`effects.${fx.id}.name`);
+    fig.querySelector("b").textContent = name;
+    cv.ariaLabel = name;
+    fig.querySelector("small").textContent = fx.meta.loop ? t("loop") : t("duration", { seconds: +fx.meta.duration.toFixed(2) });
+  }
+  chips();
+  setCat(state.cat, true);
+  if (detail) {
+    detailText();
+    code(detail.fx);
+    if ($("#d-sheet img")) sheetText();
+  }
+}
+
+/** Translate the active detail's metadata and state-dependent controls without restarting playback. */
+function detailText() {
+  const { fx } = detail, m = fx.meta;
+  const name = t(`effects.${fx.id}.name`);
+  $("#d-name").textContent = name;
+  $("#big").ariaLabel = name;
+  $("#d-desc").textContent = t(`effects.${fx.id}.desc`);
+  const frames = Math.round(m.duration * m.fps) + (m.loop ? 0 : 1);
+  $("#d-facts").replaceChildren(
+    ...[["kind", t(m.loop ? "loop" : "oneShot")], ["length", t("timing", { seconds: +m.duration.toFixed(2), count: frames, fps: m.fps })], ...(fx.mod.act ? [["acted", actFacts(fx.mod)]] : []), ["canvas", `${m.size[0]} × ${m.size[1]} px`], ["tags", m.tags.join(", ")]].flatMap(([k, v]) => [el("dt", { textContent: t(k) }), el("dd", { textContent: v })]),
+  );
+  for (const option of $("#d-pal").options) option.textContent = t(option.value ? `palettes.${option.value}` : "ownPalette");
+  $("#d-play").textContent = t(detail.playing ? "pause" : "play");
+}
+
+/** Open a fresh preview; the stable effect ID remains the source/export identifier in either language. */
 function openDetail(fx) {
   const d = $("#detail");
   const big = $("#big"), screen = isScreen(fx);
   big.parentElement.classList.toggle("screen", screen);
   detail = screen ? new Player(big, fx, 16 / 9, 1) : new Player(big, fx, 16 / 10, 1.6);
   const m = fx.meta;
-  $("#d-name").textContent = m.name;
   $("#d-id").textContent = fx.id;
-  $("#d-desc").textContent = m.desc;
-  const frames = Math.round(m.duration * m.fps) + (m.loop ? 0 : 1);
-  $("#d-facts").replaceChildren(
-    ...[["kind", m.loop ? "loop" : "one-shot"], ["length", `${+m.duration.toFixed(2)} s, ${frames} frames at ${m.fps} fps`], ...(fx.mod.act ? [["acted", actFacts(fx.mod)]] : []), ["canvas", `${m.size[0]} × ${m.size[1]} px`], ["tags", m.tags.join(", ")]].flatMap(([k, v]) => [el("dt", { textContent: k }), el("dd", { textContent: v })]),
-  );
   // controls
-  $("#d-bg").replaceChildren(...BACKDROPS.concat("none").map((b) => btn(b, () => detail.setBg(b), b === m.bg, "bg")));
+  $("#d-bg").replaceChildren(...BACKDROPS.concat("none").map((b) => btn(t(`backdrops.${b}`), () => detail.setBg(b), b === m.bg, "bg", `backdrops.${b}`)));
   $("#d-speed").replaceChildren(...[0.25, 0.5, 1].map((s) => btn(`${s}×`, () => (detail.speed = s), s === 1, "speed")));
   const pal = $("#d-pal");
-  pal.replaceChildren(el("option", { value: "", textContent: "its own" }), ...Object.keys(PAL).map((k) => el("option", { value: k, textContent: k })));
+  pal.replaceChildren(el("option", { value: "" }), ...Object.keys(PAL).map((k) => el("option", { value: k })));
   pal.value = "";
   $("#d-actor").hidden = !m.actor;
   $("#d-actor").setAttribute("aria-pressed", "true");
   $("#d-flip").setAttribute("aria-pressed", "false");
   $("#d-play").setAttribute("aria-pressed", "true");
-  $("#d-play").textContent = "pause";
+  detailText();
   $("#d-sheet").replaceChildren();
   code(fx);
   d.showModal();
   d.scrollTop = 0;
 }
-// what the body does around the effect, in a line: the wind-up, the freeze, the recovery
+/** Describe wind-up, hit freezes and recovery using localized timing messages. */
 function actFacts(mod) {
   const k = mod.act.poses, lead = Math.max(0, -k[0][0]), end = k[k.length - 1][0] - mod.meta.duration, hits = (mod.act.hits ?? []).filter((h) => h.stop);
   const parts = [];
-  if (lead > 0) parts.push(`${lead.toFixed(2)} s wind-up`);
-  if (hits.length) parts.push(`${hits.length === 1 ? `${Math.round(hits[0].stop * 1000)} ms freeze` : `${hits.length} freezes`} at ${hits[0].t.toFixed(2)} s`);
-  if (!mod.meta.loop && end > 0.02) parts.push(`${end.toFixed(2)} s recovery`);
-  return parts.join(", ") || "the body moves with it";
+  if (lead > 0) parts.push(t("windup", { seconds: lead.toFixed(2) }));
+  if (hits.length) parts.push(t(hits.length === 1 ? "freeze" : "freezes", { count: hits.length, ms: Math.round(hits[0].stop * 1000), seconds: hits[0].t.toFixed(2) }));
+  if (!mod.meta.loop && end > 0.02) parts.push(t("recovery", { seconds: end.toFixed(2) }));
+  return parts.join(t("separator")) || t("bodyMoves");
 }
-function btn(label, fn, on, group) {
+/** Create a stateful option button; an optional translation key lets its label update in place. */
+function btn(label, fn, on, group, translationKey) {
   const b = el("button", { className: "btn", type: "button", textContent: label });
+  if (translationKey) b.dataset.i18n = translationKey;
   b.setAttribute("aria-pressed", String(!!on));
   b.addEventListener("click", () => {
     if (group) b.parentElement.querySelectorAll(".btn").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
@@ -232,6 +285,7 @@ function btn(label, fn, on, group) {
   });
   return b;
 }
+/** Build executable integration code, localizing comments while keeping API names and IDs stable. */
 function code(fx) {
   const v = fx.id.split("/")[1].replace(/-(\w)/g, (_, c) => c.toUpperCase());
   const opts = { x: 160, y: 120, ...(detail.opts.palette ? { palette: "[…]" } : {}), ...(detail.flip ? { flip: true } : {}) };
@@ -243,14 +297,15 @@ function code(fx) {
     `const frame = createFrame(320, 180);`,
     `const fx = ${make}(${v}, ${JSON.stringify(opts).replace(/"\[…\]"/, "[…]").replace(/"(\w+)":/g, "$1: ").replace(/,/g, ", ")});`,
     ``,
-    `// every tick`,
+    `// ${t("tickComment")}`,
     `fx.update(dt);`,
-    `fx.draw(frame);          // color + light buffers`,
+    `fx.draw(frame);          // ${t("buffersComment")}`,
     `composite(frame, imageData.data, null);`,
-    ...(acted ? [``, `// your own character? read the timing: ${v}.act (poses, hits, freezes)`] : []),
+    ...(acted ? [``, `// ${t("actComment", { name: v })}`] : []),
   ].join("\n");
   $("#d-src").href = `${REPO}/blob/main/src/fx/${fx.id}.js`;
 }
+/** Render effect pixels once; language changes only update the output image's accessible text and caption. */
 function sheet() {
   const fx = detail.fx, m = fx.meta, [w, h] = m.size, n = Math.max(1, Math.round(m.duration * m.fps) + (m.loop ? 0 : 1));
   const cols = Math.min(n, Math.max(1, Math.ceil(Math.sqrt((n * h) / w)))), rows = Math.ceil(n / cols);
@@ -264,9 +319,19 @@ function sheet() {
     ctx.putImageData(img, (i % cols) * w, Math.floor(i / cols) * h);
   }
   const k = Math.max(1, Math.min(4, Math.floor(1100 / (cols * w))));
-  const pic = el("img", { src: cv.toDataURL("image/png"), alt: `${m.name} sprite sheet`, width: cols * w * k, height: rows * h * k });
-  $("#d-sheet").replaceChildren(pic, el("p", { textContent: `${n} frames of ${w} × ${h} px, ${cols} across, ${m.fps} fps, ${m.loop ? "loops" : "plays once"}. Save the image, or run: node tools/render.mjs ${fx.id} --sheet` }));
+  const pic = el("img", { src: cv.toDataURL("image/png"), width: cols * w * k, height: rows * h * k });
+  $("#d-sheet").replaceChildren(pic, el("p"));
+  sheetText();
 }
+/** Refresh sprite-sheet copy without regenerating or changing the exported bitmap. */
+function sheetText() {
+  const { fx } = detail, m = fx.meta, [width, height] = m.size;
+  const count = Math.max(1, Math.round(m.duration * m.fps) + (m.loop ? 0 : 1));
+  const cols = Math.min(count, Math.max(1, Math.ceil(Math.sqrt(count * height / width))));
+  $("#d-sheet img").alt = t("sheetAlt", { name: t(`effects.${fx.id}.name`) });
+  $("#d-sheet p").textContent = t("sheetInfo", { count, width, height, cols, fps: m.fps, playback: t(m.loop ? "loops" : "playsOnce"), command: `node tools/render.mjs ${fx.id} --sheet` });
+}
+/** Wire detail actions once; callbacks read the current language when they display feedback. */
 function wireDetail() {
   const d = $("#detail");
   $("#d-close").addEventListener("click", () => d.close());
@@ -275,7 +340,7 @@ function wireDetail() {
   $("#d-play").addEventListener("click", (e) => {
     detail.playing = !detail.playing;
     e.target.setAttribute("aria-pressed", String(detail.playing));
-    e.target.textContent = detail.playing ? "pause" : "play";
+    e.target.textContent = t(detail.playing ? "pause" : "play");
   });
   $("#d-again").addEventListener("click", () => detail.restart());
   $("#d-flip").addEventListener("click", (e) => {
@@ -306,12 +371,12 @@ function wireDetail() {
     const text = $("#d-code").textContent;
     try {
       await navigator.clipboard.writeText(text);
-      e.target.textContent = "copied";
+      e.target.textContent = t("copied");
     } catch {
       getSelection().selectAllChildren($("#d-code"));
-      e.target.textContent = "selected";
+      e.target.textContent = t("selected");
     }
-    setTimeout(() => (e.target.textContent = "copy"), 1400);
+    setTimeout(() => (e.target.textContent = t("copy")), COPY_FEEDBACK_MS);
   });
 }
 
@@ -326,8 +391,13 @@ function frameLoop(now) {
 }
 
 build();
-chips();
 wireDetail();
+document.querySelectorAll("[data-language]").forEach((select) => {
+  select.replaceChildren(...LANGUAGES.map(({ code, label }) => el("option", { value: code, textContent: label })));
+  select.addEventListener("change", (event) => i18n.changeLanguage(event.target.value));
+});
+i18n.on("languageChanged", renderLanguage);
+renderLanguage();
 $("#q").addEventListener("input", (e) => {
   state.q = e.target.value;
   filter();

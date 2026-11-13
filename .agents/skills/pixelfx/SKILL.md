@@ -1,8 +1,7 @@
 ---
 name: pixelfx
-description: Make pixel art effects and sprite animations in code with the pixelfx library, which has 244 ready-made ones, acted out by a character who winds up, freezes on contact and recovers (fire, explosions, water, ice, lightning, sci-fi, melee, impacts, projectiles, spawn and death, arcane, holy, shadow, status, nature, weather, UI, pickups, transitions, critters) to drop into a game, recolor, export as sprite sheets or remix, plus a draft, render, look, refine loop that makes new ones look hand-animated. Use when someone wants pixel art VFX, sprite animations or sprite sheets, game juice, a specific effect ("a frost nova for my mage", "a coin pickup sparkle"), wants to use or export a pixelfx effect in Godot, Unity, Phaser or a canvas game, or wants their pixel effects to look better.
+description: Find, integrate, recolor, export or create pixel art VFX and sprite animations with the pixelfx code library. Use for pixelfx effects in Canvas, Phaser, Godot or Unity, sprite sheet export, character attack timing, and improving pixel effects through rendering and visual refinement. Not for general UI design or unrelated image generation.
 license: MIT
-compatibility: Node 18 or newer. ffmpeg is optional (GIF and MP4 previews).
 ---
 
 # pixelfx
@@ -18,10 +17,15 @@ make good ones.
 
 ## Before anything
 
-1. Work in a pixelfx checkout. If the working directory has no `tools/render.mjs`, clone one next to the
-   project: `git clone https://github.com/patch-gg/pixelfx`. No install step: the tools use only Node.
+Requires Node.js 18 or newer. ffmpeg is optional for GIF and MP4 previews. The render and export tools use
+only Node; `npm ci` installs esbuild for the optional static gallery build.
+
+1. Work in a pixelfx checkout. For this repository-scoped skill, the checkout is three directories above
+   this skill folder. Resolve `tools/`, `docs/`, `src/` and output paths from that checkout, not from the
+   skill folder or a target game's directory. When installed separately, reuse an existing checkout;
+   if none exists, clone one next to the target project: `git clone https://github.com/patch-gg/pixelfx`.
 2. Check it runs: `node tools/render.mjs fire/torch` writes `records/fire/torch/contact.png`. Open that PNG with
-   your image-reading tool. That contact sheet is how you see every effect from now on.
+   Codex's image-viewing tool. That contact sheet is how you see every effect from now on.
 
 ## 1. Look for an existing effect first
 

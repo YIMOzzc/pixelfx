@@ -1,0 +1,4 @@
+interface:
+  display_name: "pixelfx"
+  short_description: "Create, preview and export pixel art game effects"
+  default_prompt: "Use $pixelfx to find or create a pixel art effect, render a preview, and integrate it into my game."

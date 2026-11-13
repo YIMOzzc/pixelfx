@@ -6,7 +6,7 @@
 
 **<!-- count -->244<!-- /count --> pixel art effects and animations, every one a small piece of code.** Fire,
 explosions, magic, weather, UI, pickups, critters and more. Play them live, recolor and mirror them, drop them into
-a browser game, or export sprite sheets for any engine. Plus a Claude Code skill that makes new ones the way a
+a browser game, or export sprite sheets for any engine. Plus a Codex skill that makes new ones the way a
 picky pixel artist would: draft, render, look, refine.
 
 Every effect that involves a character is **acted out**: he winds up, lets go, freezes on contact and recovers, and a
@@ -153,20 +153,58 @@ The body is yours to use too: `skeleton(pose)` gives you every joint of a pose i
 
 ## the skill.
 
-The `pixelfx` skill teaches Claude Code to find, use, export and make effects. Install it as a plugin:
+The `pixelfx` skill teaches Codex to find, use, export and make effects. It lives in
+`.agents/skills/pixelfx/`, so Codex can discover it when you open this repository. Invoke it with `$pixelfx`
+or describe a matching task. If it does not appear in an existing session, reopen the chat or restart Codex.
 
-```
-/plugin marketplace add patch-gg/pixelfx
-/plugin install pixelfx@pixelfx
+To use it in other projects, copy it into your personal skills directory (do not overwrite an existing skill):
+
+```bash
+mkdir -p ~/.agents/skills
+cp -R .agents/skills/pixelfx ~/.agents/skills/
 ```
 
-or copy `skills/pixelfx` into `~/.claude/skills/`. Then ask for what you want:
+The skill needs a pixelfx checkout to run its tools; installing the skill alone does not install the library.
+Then ask for what you want:
 
 - "Add a frost nova to my mage's ultimate."
 - "Make five takes on a coin pickup sparkle and show me the best two."
 - "Export the fire and explosions categories as sprite sheets for Godot."
 - "This hit effect feels floaty. Make it punchier."
 - "Give this spell a wind-up and make the enemy react to it."
+
+## run locally.
+
+Requires Node.js 18 or newer. From the repository root:
+
+```bash
+npm start
+```
+
+Open [the local gallery](http://localhost:8080/gallery/). No dependency installation is needed to browse,
+render or export effects. Use `npm start -- 8081` to select another port. Stop the server with Ctrl+C.
+
+To build a static gallery instead:
+
+```bash
+npm ci
+npm run build
+```
+
+The static outputs are `dist/gallery/` and `dist/page/`. ffmpeg is optional for GIF and MP4 exports.
+
+### gallery languages / 画廊语言
+
+画廊默认中文，可通过页面右上角或详情窗口中的 `中文 / English` 下拉框切换语言，选择会保存在当前浏览器。
+界面、分类、244 个特效的名称与说明、预览控件和导出提示均支持中英文；搜索同时匹配中英文，切换时保留筛选与预览状态。
+源码 ID、API 名称、标签和导出的特效像素保持原样，动画中绘制的英文文字（如 `LEVEL UP!`）属于特效素材。
+
+多语言使用 [i18next](https://github.com/i18next/i18next)（MIT），固定版本随项目存放于 `gallery/vendor/`，启动和切换语言无需下载依赖。
+模块入口为 `gallery/i18n.js`，界面词条在 `gallery/locales/en.js`、`zh.js`，中文特效译文在 `zh-effects.js`。
+英文特效与分类直接复用库的元数据，缺少译文时回退到英文。新增语言时添加词典，在 `LANGUAGES` 和 `resources` 注册即可。
+
+The gallery defaults to Chinese and supports English with a saved browser preference. Both languages work in search.
+Run `npm run check:i18n` to verify catalog coverage, interpolation, persistence and fallback behavior.
 
 ## make your own.
 
