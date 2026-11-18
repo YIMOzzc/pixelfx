@@ -196,28 +196,66 @@ function ellipsoid(c, R, r, part, mat) {
 const PART = { pelvis: 1, waist: 2, chest: 3, neck: 4, head: 5, face: 6, upperN: 7, elbowN: 8, foreN: 9, handN: 10, upperF: 11, elbowF: 12, foreF: 13, handF: 14, thighN: 15, kneeN: 16, shinN: 17, footN: 18, thighF: 19, kneeF: 20, shinF: 21, footF: 22, weapon: 23, offWeapon: 24 };
 const useFrame = (name) => { curFrameIndex = FRAME_IDS.indexOf(name); };
 
-function drawBody(S) {
+function drawBody(S, look) {
   const { B, armN, armF, legN, legF, sN, sF, hipN, hipF, turn } = S, F_ = (name) => B[name];
   useFrame("pelvis");
   ellipsoid(add(F_("pelvis").t, mv(F_("pelvis").R, [0, -0.2, 0])), F_("pelvis").R, [2.9, 2.6, 4.2], PART.pelvis, 0);
+  if (look?.robe) {
+    const { t, R } = B.pelvis;
+    const at = (x, y, z) => add(t, mv(R, [x, y, z]));
+    ellipsoid(at(-0.7, -7.5, 0), R, [4.9, 8.5, 5.6], PART.pelvis, 0);
+    sweep(at(-2.4, -12, -2), at(-2.4, -12, 3.2), 2, 2.4, PART.pelvis, 0);
+    sweep(at(2, -1.3, 3.25), at(2.2, -12.7, 3.9), 0.85, 0.65, PART.pelvis, 4);
+    ellipsoid(at(0, 1.7, 0), R, [3.65, 1.3, 4.6], PART.pelvis, 4);
+  }
   useFrame("waist");
   sweep(F_("pelvis").t, F_("chest").t, 3, 3.3, PART.waist, 1);
   useFrame("chest");
-  ellipsoid(add(F_("chest").t, mv(F_("chest").R, [0.2, 0.9, 0])), F_("chest").R, [3.4, 4.2, 5.5], PART.chest, 0);
+  if (look?.cloak) {
+    const { t, R } = B.chest;
+    ellipsoid(add(t, mv(R, [-6.1, -6.9, -1.0])), R, [2.1, 9.4, 3.6], PART.chest, 1);
+  }
+  ellipsoid(add(F_("chest").t, mv(F_("chest").R, [0.2, 0.9, 0])), F_("chest").R, [3.4, 4.2, look?.chest ?? 5.5], PART.chest, 0);
+  if (look?.robe) {
+    const { t, R } = B.chest;
+    const at = (x, y, z) => add(t, mv(R, [x, y, z]));
+    sweep(at(1, 3, 3.05), at(3.05, -1, 1.8), 0.85, 0.65, PART.chest, 4);
+  }
   useFrame("neck");
   sweep(F_("neck").t, add(F_("neck").t, mv(F_("head").R, [0, 1.6, 0])), 1.25, 1.15, PART.neck, 1);
   useFrame("head");
-  ellipsoid(F_("head").t, F_("head").R, [3, 3.3, 2.8], PART.head, 0);
-  ellipsoid(add(F_("head").t, mv(F_("head").R, [0.85, -0.45, 0])), F_("head").R, [2.4, 2.7, 2.35], PART.face, 0);
+  ellipsoid(F_("head").t, F_("head").R, look?.helmet ?? [3, 3.3, 2.8], PART.head, 0);
+  ellipsoid(add(F_("head").t, mv(F_("head").R, [look?.faceForward ?? 0.85, -0.45, 0])), F_("head").R, look?.face ?? [2.4, 2.7, 2.35], PART.face, 0);
+  if (look?.hair) {
+    const { t, R } = B.head;
+    const at = (x, y, z) => add(t, mv(R, [x, y, z]));
+    const tie = at(-2.15, 1.65, 1.15);
+    const bend = at(-6.2, -3, 1.8);
+    sweep(tie, bend, 1.55, 1.85, PART.head, 0, 0.3);
+    sweep(bend, at(-8.1, -8.6, 1.65), 1.85, 1.1, PART.head, 0);
+    sweep(at(-8.1, -8.6, 1.65), at(-10, -11, 1.55), 1.1, 0.48, PART.head, 0);
+    sweep(at(-5.8, -4.4, 2), at(-5.9, -11.7, 2.65), 1.45, 0.55, PART.head, 0);
+    ellipsoid(at(0.8, 1.55, 0.55), R, [2.75, 1.7, 2.55], PART.head, 0);
+  }
+  if (look?.crest) {
+    const { t, R } = B.head;
+    ellipsoid(add(t, mv(R, look.crest.offset)), R, look.crest.radii, PART.head, 3);
+  }
   const arm = (far, A, sh, up, el, fo, ha, nameU, nameF) => {
     curDim = far ? 1 : 0;
     useFrame(nameU);
-    sphere(sh, 2.5, up, 0);
+    sphere(sh, look?.shoulder ?? 2.5, up, 0);
     sweep(sh, A.joint, 2.1, 1.6, up, 0);
     sphere(A.joint, 1.45, el, 1);
     useFrame(nameF);
-    sweep(A.joint, A.end, 1.6, 1.2, fo, 0, 0.15);
-    sphere(A.end, 1.9, ha, 0);
+    if (look?.robe) {
+      const cuff = add(A.joint, mul(sub(A.end, A.joint), 0.72));
+      sweep(A.joint, cuff, 1.85, 2.45, fo, 0, 0.25);
+      sweep(cuff, add(cuff, mul(sub(A.end, cuff), 0.32)), 2.4, 2.05, fo, 4);
+    } else {
+      sweep(A.joint, A.end, 1.6, 1.2, fo, 0, 0.15);
+    }
+    sphere(A.end, look?.robe ? 1.55 : 1.9, ha, look?.robe ? 3 : 0);
     curDim = 0;
   };
   arm(false, armN, sN, PART.upperN, PART.elbowN, PART.foreN, PART.handN, "upperN", "foreN");
@@ -352,7 +390,7 @@ export const WEAPONS = {
 };
 
 // ---- flat tones, seams, and one clean ink line
-function finish(S, restFrames) {
+function finish(S, restFrames, look) {
   const dim = (part) => part >= PART.upperF && part <= PART.handF ? 1 : part >= PART.thighF && part <= PART.footF ? 1 : 0;
   const toneOf = (v, part) => {
     let t = v > 0.8 ? 0 : v > 0.42 ? 1 : v > 0.08 ? 2 : 3;
@@ -377,7 +415,15 @@ function finish(S, restFrames) {
   }
   for (const i of touched) {
     if (Mat[i] === 2) continue;
-    Col[i] = (Mat[i] === 1 ? CORE : SHELL)[tones.get(i)];
+    let ramp = Mat[i] === 1 ? CORE : SHELL;
+    if (look) {
+      if (Mat[i] === 1) ramp = look.core;
+      else if (Mat[i] === 4) ramp = look.robeTrim;
+      else if (Mat[i] === 3 || Part[i] === PART.face) ramp = look.trim;
+      else if (Part[i] === PART.head) ramp = look.helm;
+      else ramp = look.shell;
+    }
+    Col[i] = ramp[tones.get(i)];
   }
   // where two parts meet: a soft seam if they touch, ink if one stands in front of the other
   const marks = new Map();
@@ -397,7 +443,7 @@ function finish(S, restFrames) {
   const { B } = S, chestAt = add(B.chest.t, mv(B.chest.R, [3, 1.6, -1.8]));
   if (mv(B.chest.R, [1, 0, 0])[2] > 0.15) {
     const i = (OY - Math.round(chestAt[1])) * BW + (OX + Math.round(chestAt[0]));
-    if (Part[i] === PART.chest) Col[i] = MARK;
+    if (Part[i] === PART.chest) Col[i] = look?.trim[0] ?? MARK;
   }
   // the outline, and everything into a small list of pixels
   const list = touched.slice(), ring = new Map();
@@ -436,13 +482,14 @@ const turnAll = (S, a) => {
   S.axis = P(S.axis); S.side = P(S.side);
 };
 let REST_FRAMES = null;
-function render(pose) {
-  const S = solve(pose), q = S.q, whole = (q.yaw ?? 0) + (q.face === -1 ? Math.PI : 0);
+function render(pose, look) {
+  const armedPose = look?.weapon && pose.weapon === undefined ? { ...pose, ...look.weapon } : pose;
+  const S = solve(armedPose), q = S.q, whole = (q.yaw ?? 0) + (q.face === -1 ? Math.PI : 0);
   if (whole) turnAll(S, whole);
   const air = (q.y ?? 0) < -0.5;
   clipBody = !air;
   clipWeapon = !air;
-  drawBody(S);
+  drawBody(S, look);
   clipBody = false;
   if (S.W) S.W.draw(along(S.armN.end, S.axis, S.side, PART.weapon), q, S.armF.end);
   if (S.OW) {
@@ -452,7 +499,7 @@ function render(pose) {
     S.OW.draw(along(S.armF.end, ax, sd, PART.offWeapon), q, S.armF.end);
   }
   clipWeapon = false;
-  return finish(S, REST_FRAMES);
+  return finish(S, REST_FRAMES, look);
 }
 REST_FRAMES = solve({}).B;
 
@@ -472,12 +519,12 @@ export function shortfall(pose) {
   return Math.max(near, far);
 }
 /** The pixels of a pose: { n, xs, ys, color, src, ink, x0, y0, x1, y1 }, in local space with the feet at (0, 0). */
-export function posed(pose) {
-  const key = keyOf(pose);
+export function posed(pose, look) {
+  const key = (look ? look.id + ":" : "") + keyOf(pose);
   let r = CACHE.get(key);
   if (!r) {
     if (CACHE.size > 6000) CACHE.clear();
-    CACHE.set(key, (r = render(pose)));
+    CACHE.set(key, (r = render(pose, look)));
   }
   return r;
 }

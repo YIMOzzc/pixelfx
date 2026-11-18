@@ -50,6 +50,13 @@
         <div class="row"><label data-i18n="play">播放</label><button class="btn" id="d-play" type="button">暂停</button><button class="btn" id="d-again" type="button" data-i18n="again">重播</button><span id="d-speed" class="row"></span></div>
         <div class="row"><label data-i18n="backdrop">背景</label><span id="d-bg" class="row"></span></div>
         <div class="row"><label data-i18n="palette">配色</label><select class="btn" id="d-pal" data-i18n-aria-label="palette" aria-label="配色"></select><button class="btn" id="d-seed" type="button" data-i18n="seed">随机种子</button></div>
+        <div class="row" id="d-character-controls" hidden>
+          <label for="d-character-style" data-i18n="appearance">角色形象</label>
+          <select id="d-character-style" class="btn"></select>
+          <label for="d-character-seed" data-i18n="characterSeed">角色种子</label>
+          <input id="d-character-seed" class="btn" type="number" min="0" max="4294967295" step="1" required>
+          <button class="btn" id="d-character-roll" type="button" data-i18n="rollCharacter">随机生成</button>
+        </div>
         <div class="row"><label data-i18n="show">显示</label><button class="btn" id="d-flip" type="button" data-i18n="mirror">镜像</button><button class="btn" id="d-actor" type="button" data-i18n="character">角色</button><button class="btn" id="d-make" type="button" data-i18n="spriteSheet">精灵图</button></div>
       </div>
       <div class="code-head"><span data-i18n="use">使用示例</span><span><a id="d-src" target="_blank" rel="noopener" data-i18n="source">源码</a> · <button class="btn" id="d-copy" type="button" data-i18n="copy">复制</button></span></div>

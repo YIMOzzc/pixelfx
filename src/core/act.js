@@ -173,17 +173,22 @@ HERO2.forEach((row, r) => [...row].forEach((ch, c) => {
 }));
 
 // every cell of the standing sprite, mapped to the nearest cell that's on the body
-const NEAREST = new Int16Array(24 * 38).fill(-1);
-for (let r = 0; r < 38; r++)
-  for (let c = 0; c < 24; c++) {
-    let best = -1, bd = 1e9;
-    for (let y = Math.max(0, r - 7); y < Math.min(38, r + 8); y++)
-      for (let x = Math.max(0, c - 7); x < Math.min(24, c + 8); x++) {
-        const d = (x - c) * (x - c) + (y - r) * (y - r);
-        if (REST_MASK[y * 24 + x] && d < bd) { bd = d; best = y * 24 + x; }
-      }
-    NEAREST[r * 24 + c] = best;
-  }
+function nearestBody(mask) {
+  const nearest = new Int16Array(24 * 38).fill(-1);
+  for (let r = 0; r < 38; r++)
+    for (let c = 0; c < 24; c++) {
+      let best = -1, bd = 1e9;
+      for (let y = Math.max(0, r - 7); y < Math.min(38, r + 8); y++)
+        for (let x = Math.max(0, c - 7); x < Math.min(24, c + 8); x++) {
+          const d = (x - c) * (x - c) + (y - r) * (y - r);
+          if (mask[y * 24 + x] && d < bd) { bd = d; best = y * 24 + x; }
+        }
+      nearest[r * 24 + c] = best;
+    }
+  return nearest;
+}
+const NEAREST = nearestBody(REST_MASK);
+const characterMaps = new WeakMap();
 const lum = (c) => (0.3 * (c & 255) + 0.59 * ((c >>> 8) & 255) + 0.11 * ((c >>> 16) & 255)) / 255;
 // an effect's color over the standing body, moved onto a pixel of the pose: its color, at this pixel's own light and shade
 function carry(v, rest, own) {
@@ -208,6 +213,15 @@ export function actSpan(mod) {
 export function createAct(mod, o = {}) {
   const a = mod.act ?? {}, meta = mod.meta ?? {}, D = meta.duration ?? 1, flip = !!o.flip, seed = o.seed ?? meta.options?.seed ?? 1;
   const fx = createFx(mod, o), track = a.poses ?? [[0, { ...STAND }]], span = actSpan(mod);
+  const character = fx.options.actor;
+  const look = character?.appearance;
+  const restMask = look ? character.mask.data : REST_MASK;
+  const restPixels = look ? character.pixels : REST_PX;
+  let nearest = NEAREST;
+  if (look && a.onBody) {
+    nearest = characterMaps.get(character);
+    if (!nearest) characterMaps.set(character, (nearest = nearestBody(restMask)));
+  }
   const X = o.x ?? 0, Y = o.y ?? 0;
   const targets = (a.targets ?? (a.target ? [a.target] : [])).map((g, i) => new Target(g.x ?? 66, seed + 4 + i));
   const hits = (a.hits ?? []).map((h) => ({ ...h })).sort((p, q) => p.t - q.t), dust = (a.dust ?? []).slice();
@@ -323,7 +337,7 @@ export function createAct(mod, o = {}) {
         return;
       }
       const rx = Math.round(q.x ?? 0), ry = Math.round(q.y ?? 0), BX = FX + (flip ? -rx : rx), BY = FY + ry;
-      const r = posed(q), mirror = flip;
+      const r = posed(q, look), mirror = flip;
       const paint = (i, color) => {
         const px = mirror ? BX - r.xs[i] - 1 : BX + r.xs[i], py = BY + r.ys[i];
         if (px < 0 || py < 0 || px >= W || py >= H) return;
@@ -334,7 +348,7 @@ export function createAct(mod, o = {}) {
       const drawGhosts = () => {
         for (const g of ghosts) {
           // after-images are light, not paint: they brighten what's behind them and leave nothing muddy
-          const gr = posed(g.q), gx = FX + (flip ? -Math.round(g.q.x ?? 0) : Math.round(g.q.x ?? 0)), gy = FY + Math.round(g.q.y ?? 0), k = 0.5 * (1 - g.age / GHOST_LIFE);
+          const gr = posed(g.q, look), gx = FX + (flip ? -Math.round(g.q.x ?? 0) : Math.round(g.q.x ?? 0)), gy = FY + Math.round(g.q.y ?? 0), k = 0.5 * (1 - g.age / GHOST_LIFE);
           const gm = flip, r0 = (gc & 255) * k, g0 = ((gc >>> 8) & 255) * k, b0 = ((gc >>> 16) & 255) * k;
           for (let i = 0; i < gr.n; i++) {
             const px = gm ? gx - gr.xs[i] - 1 : gx + gr.xs[i], py = gy + gr.ys[i];
@@ -384,7 +398,7 @@ export function createAct(mod, o = {}) {
       };
       const rest = (sx, sy) => {
         const c = (flip ? FX - sx - 1 : sx - FX) + 12, r0 = sy - FY + 38;
-        return c >= 0 && r0 >= 0 && c < 24 && r0 < 38 && REST_MASK[r0 * 24 + c] === 1;
+        return c >= 0 && r0 >= 0 && c < 24 && r0 < 38 && restMask[r0 * 24 + c] === 1;
       };
       const C = frame.color, Ls = frame.light;
       const copy = (buf, sx, sy, s) => {
@@ -414,15 +428,15 @@ export function createAct(mod, o = {}) {
         return sx >= 0 && sy >= 0 && sx < W && sy < H ? sy * W + sx : -1;
       };
       for (let i = 0; i < r.n; i++) {
-        const s = r.src[i] >= 0 ? NEAREST[r.src[i]] : -1;
+        const s = r.src[i] >= 0 ? nearest[r.src[i]] : -1;
         if (s < 0) {
           if (alpha > 0.5) paint(i, r.color[i]);
           continue;
         }
-        const j = restIndex(s), v = j >= 0 ? B.color[j] : REST_PX[s];
+        const j = restIndex(s), v = j >= 0 ? B.color[j] : restPixels[s];
         if (!v) continue;
         // the effect left this bit of body alone, or changed it: carry the change, on top of this pixel's own shading
-        paint(i, v === REST_PX[s] ? r.color[i] : carry(v, REST_PX[s], r.color[i]));
+        paint(i, v === restPixels[s] ? r.color[i] : carry(v, restPixels[s], r.color[i]));
       }
       for (let sy = 0; sy < H; sy++)
         for (let sx = 0; sx < W; sx++) {
@@ -466,11 +480,11 @@ export function actTiming(mod) {
 }
 
 /** The box an act needs in local space, so nothing gets cut off: { x0, y0, x1, y1 }, sampled over its poses. */
-export function actBounds(mod) {
+export function actBounds(mod, actor) {
   const a = mod.act, [w, h] = mod.meta.size, [ox, oy] = mod.meta.origin;
   let x0 = -ox, y0 = -oy, x1 = w - ox, y1 = h - oy;
   const see = (p) => {
-    const r = posed(p), X = Math.round(p.x ?? 0), Y = Math.round(p.y ?? 0), a = r.x0, b = r.x1;
+    const r = posed(p, actor?.appearance), X = Math.round(p.x ?? 0), Y = Math.round(p.y ?? 0), a = r.x0, b = r.x1;
     x0 = Math.min(x0, a + X - 1); x1 = Math.max(x1, b + X + 1); y0 = Math.min(y0, r.y0 + Y - 1); y1 = Math.max(y1, r.y1 + Y + 1);
   };
   const k = a?.poses;

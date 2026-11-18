@@ -87,7 +87,7 @@ export function renderFrames(fx, opts = {}) {
  * Returns { w, h, fps, n, frames: [{ t (effect time, negative before it starts), frozen, color }] }.
  */
 export function renderAct(fx, opts = {}) {
-  const { meta } = fx, fps = opts.fps ?? 60, b = actBounds(fx.mod), pad = opts.pad ?? 6;
+  const { meta } = fx, fps = opts.fps ?? 60, b = actBounds(fx.mod, opts.options?.actor), pad = opts.pad ?? 6;
   const w = b.x1 - b.x0 + pad * 2, h = b.y1 - b.y0 + pad * 2, X = pad - b.x0, Y = pad - b.y0;
   const frame = createFrame(w, h), bgKind = opts.bg ?? meta.bg, bg = bgKind === "none" ? null : backdrop(bgKind, w, h, Y);
   const act = createAct(fx.mod, { x: X, y: Y, ...(opts.seed !== undefined ? { seed: opts.seed } : {}), ...(opts.options ?? {}) });

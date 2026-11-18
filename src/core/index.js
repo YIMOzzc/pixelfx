@@ -14,3 +14,5 @@ export { createAct, actBounds, actSpan, actTiming, poseAt, lerpPose, Target, STA
 export { skeleton, posedParts } from "./rig.js";
 export { READY } from "./poses.js";
 export { chain, shiftKeys, shiftHits } from "./chain.js";
+
+export { createCharacter, CHARACTER_STYLES } from "./character.js";

@@ -148,6 +148,30 @@ Effects drawn on the body (frost, poison, a scan line) are written against the s
 wherever he goes: each pixel of a pose knows which pixel of the standing body it came from. `node tools/act.mjs
 <id> --sheet` bakes a whole act, character included, into a sprite sheet.
 
+### Generate a character
+
+In the gallery, select **With characters**, open an effect, and choose Knight, Ranger, Android, or Seeded style under
+Appearance. The character seed controls the appearance independently of the effect seed. The same style and
+seed recreate the same character. Each design shares the existing humanoid skeleton and supplies a matching
+24 × 38 rest sprite and mask for effects that wrap or recolor the body.
+
+```js
+import { createAct, createCharacter } from "pixelfx";
+import * as freeze from "pixelfx/fx/ice/freeze";
+
+const actor = createCharacter({ style: "ranger", seed: 42 });
+const act = createAct(freeze, { actor, x: 160, y: 120 });
+```
+
+Omit `style` to choose it from the seed. The result also works as the `actor` option to `createFx`.
+Export a transparent standing sprite or bake a full animation with the generated character.
+
+```sh
+node tools/character.mjs ranger 42
+node tools/act.mjs melee/sword-slash --character knight --character-seed 42 --sheet
+```
+
+
 The body is yours to use too: `skeleton(pose)` gives you every joint of a pose in 3D, to hang your own things on, and
 `posedParts(pose)` gives you each part drawn on its own.
 
@@ -156,6 +180,9 @@ The body is yours to use too: `skeleton(pose)` gives you every joint of a pose i
 The `pixelfx` skill teaches Codex to find, use, export and make effects. It lives in
 `.agents/skills/pixelfx/`, so Codex can discover it when you open this repository. Invoke it with `$pixelfx`
 or describe a matching task. If it does not appear in an existing session, reopen the chat or restart Codex.
+
+For an original character design or a new action, use the [pixelfx-character skill](skills/pixelfx-character/SKILL.md).
+In this checkout, ask Codex to use that file and describe the character or motion you want.
 
 To use it in other projects, copy it into your personal skills directory (do not overwrite an existing skill):
 
@@ -176,6 +203,15 @@ Then ask for what you want:
 ## run locally.
 
 Requires Node.js 18 or newer. From the repository root:
+
+- macOS or Linux: run `./preview.sh`.
+- Windows: double-click `preview.bat` or run it from Command Prompt.
+
+Both scripts start the source gallery and open it in your browser. Refresh the page after saving changes.
+Pass a port if needed, for example `./preview.sh 8081` or `preview.bat 8081`. If you add a new effect
+module, run `node tools/index.mjs` to register it before refreshing.
+
+To start the server without opening a browser:
 
 ```bash
 npm start

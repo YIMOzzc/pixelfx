@@ -6,8 +6,9 @@
 //   node tools/act.mjs melee/sword-slash --mp4          video: records/act/melee-sword-slash.mp4
 //   node tools/act.mjs melee/sword-slash --sheet        the whole act, character and all, as a transparent sprite sheet
 //
-// Options: --from S --to S (strip range) --step S (default 1/12) --cols N --zoom N --bg KIND --out FILE --no-target --seconds S
+// Options: --from S --to S (strip range) --step S (default 1/12) --cols N --zoom N --bg KIND --out FILE --no-target --seconds S --character STYLE --character-seed N
 
+import { createCharacter } from "../src/core/index.js";
 import { join } from "node:path";
 import { ROOT, resolveIds, loadEffect, renderAct, spriteSheet, canvas, upscale, save, writeVideo } from "./lib/fxlib.mjs";
 
@@ -18,18 +19,23 @@ for (let i = 0; i < args.length; i++) {
   else pos.push(args[i]);
 }
 const ids = resolveIds(pos);
+const actor = flags.character !== undefined || flags["character-seed"] !== undefined
+  ? createCharacter({ style: flags.character === "random" ? undefined : flags.character, seed: +(flags["character-seed"] ?? 1) })
+  : undefined;
+const options = actor ? { actor } : undefined;
 for (const id of ids) {
   const fx = await loadEffect(id);
   if (flags.sheet) {
-    const r = renderAct(fx, { fps: fx.meta.fps, bg: "none", target: !flags["no-target"], hold: 0 }), name = id.split("/")[1], base = join(ROOT, "records", "act", id.replace("/", "-"));
+    const r = renderAct(fx, { options, fps: fx.meta.fps, bg: "none", target: !flags["no-target"], hold: 0 }), name = id.split("/")[1], base = join(ROOT, "records", "act", id.replace("/", "-"));
     const s = spriteSheet(fx, r, name);
+    if (actor) s.json.meta.pixelfx.character = { style: actor.style, seed: actor.seed };
     s.json.meta.pixelfx.pivot = r.pivot;
     save(`${base}.sheet.png`, s.png);
     save(`${base}.sheet.json`, JSON.stringify(s.json, null, 1));
     console.log(`${id}  ${r.n} frames of ${r.w} x ${r.h}  ->  ${base}.sheet.png`);
     continue;
   }
-  const r = renderAct(fx, { fps: 60, bg: flags.bg, target: !flags["no-target"], seconds: flags.seconds ? +flags.seconds : undefined });
+  const r = renderAct(fx, { options, fps: 60, bg: flags.bg, target: !flags["no-target"], seconds: flags.seconds ? +flags.seconds : undefined });
   const base = join(ROOT, "records", "act", id.replace("/", "-"));
   if (flags.mp4) {
     const k = +(flags.zoom ?? Math.max(2, Math.min(8, Math.floor(960 / Math.max(r.w, r.h)))));

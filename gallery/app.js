@@ -2,7 +2,7 @@
 // opens one effect with its options, a sprite sheet and the code to use it.
 
 import { effects, categories } from "../src/fx/index.js";
-import { createFrame, clearFrame, createFx, createAct, actBounds, composite, backdrop, drawActor, painterFor, stockActor, actorAlphaOf, PAL, BACKDROPS } from "../src/core/index.js";
+import { createFrame, clearFrame, createFx, createAct, actBounds, composite, backdrop, drawActor, painterFor, stockActor, createCharacter, CHARACTER_STYLES, actorAlphaOf, PAL, BACKDROPS } from "../src/core/index.js";
 import { i18n, t, LANGUAGES } from "./i18n.js";
 
 const REPO = "https://github.com/patch-gg/pixelfx";
@@ -21,6 +21,8 @@ const FX = Object.entries(effects).map(([id, mod]) => {
 const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
 // full-screen effects (transitions, weather, impact frames) fill a 16:9 stage edge to edge instead of floating in it
 const isScreen = (fx) => fx.meta.size[0] >= 320 && Math.abs(fx.meta.size[0] / fx.meta.size[1] - 16 / 9) < 0.05;
+const supportsCharacter = (fx) => !!(fx.meta.actor || fx.mod.act);
+const characterCount = FX.filter(supportsCharacter).length;
 const $ = (s) => document.querySelector(s);
 function el(tag, props = {}, kids = []) {
   const e = Object.assign(document.createElement(tag), props);
@@ -39,7 +41,7 @@ class Player {
   layout(aspect, pad) {
     Object.assign(this, { aspect, pad });
     // an act needs room for the whole performance, not just the effect's canvas
-    const acted = this.acted, b = acted ? { ...actBounds(this.fx.mod) } : null;
+    const acted = this.acted, b = acted ? { ...actBounds(this.fx.mod, this.opts.actor) } : null;
     // an act happens above the floor: don't spend the tile on bricks
     if (b) b.y1 = Math.min(b.y1, 22);
     const [w, h] = acted ? [b.x1 - b.x0, b.y1 - b.y0] : this.fx.meta.size, [ox, oy] = acted ? [-b.x0, -b.y0] : this.fx.meta.origin;
@@ -166,10 +168,11 @@ function chips() {
   };
   box.replaceChildren();
   mk("all", t("all"), FX.length);
+  mk("characters", t("withCharacters"), characterCount);
   for (const s of sections) mk(s.c.id, t(`categories.${s.c.id}.name`), s.list.length);
 }
 function setCat(id, fromHash = false) {
-  state.cat = sections.some((s) => s.c.id === id) ? id : "all";
+  state.cat = id === "characters" || sections.some((s) => s.c.id === id) ? id : "all";
   document.querySelectorAll(".chip").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.cat === state.cat)));
   if (!fromHash) history.replaceState(null, "", state.cat === "all" ? location.pathname : "#" + state.cat);
   filter();
@@ -182,7 +185,10 @@ function filter() {
     let any = false;
     for (const fx of s.list) {
       const t = tiles.find((x) => x.fx === fx);
-      const hit = (state.cat === "all" || state.cat === s.c.id) && (!q || fx.search.includes(q));
+      const matchesCategory = state.cat === "characters"
+        ? supportsCharacter(fx)
+        : state.cat === "all" || state.cat === s.c.id;
+      const hit = matchesCategory && (!q || fx.search.includes(q));
       t.fig.hidden = !hit;
       any ||= hit;
       shown += hit;
@@ -194,6 +200,20 @@ function filter() {
 
 // ---- detail
 let detail = null;
+const characterChoice = { style: "", seed: 1 };
+function updateCharacter() {
+  const enabled = supportsCharacter(detail.fx) && characterChoice.style;
+  if (enabled) {
+    const { style, seed } = characterChoice;
+    detail.opts.actor = createCharacter({ style: style === "random" ? undefined : style, seed });
+  } else delete detail.opts.actor;
+  $("#d-character-seed").disabled = !enabled;
+  $("#d-character-roll").disabled = !enabled;
+  if (detail.acted) detail.layout(detail.aspect, detail.pad);
+  else detail.restart();
+  $("#d-sheet").replaceChildren();
+  code(detail.fx);
+}
 /**
  * Update all visible copy in place, preserving players, filters, options and generated sprite sheets.
  * Uses plain text/attributes so translation strings cannot inject HTML.
@@ -238,6 +258,7 @@ function detailText() {
     ...[["kind", t(m.loop ? "loop" : "oneShot")], ["length", t("timing", { seconds: +m.duration.toFixed(2), count: frames, fps: m.fps })], ...(fx.mod.act ? [["acted", actFacts(fx.mod)]] : []), ["canvas", `${m.size[0]} × ${m.size[1]} px`], ["tags", m.tags.join(", ")]].flatMap(([k, v]) => [el("dt", { textContent: t(k) }), el("dd", { textContent: v })]),
   );
   for (const option of $("#d-pal").options) option.textContent = t(option.value ? `palettes.${option.value}` : "ownPalette");
+  for (const option of $("#d-character-style").options) option.textContent = t(`characterStyles.${option.value || "stock"}`);
   $("#d-play").textContent = t(detail.playing ? "pause" : "play");
 }
 
@@ -255,7 +276,13 @@ function openDetail(fx) {
   const pal = $("#d-pal");
   pal.replaceChildren(el("option", { value: "" }), ...Object.keys(PAL).map((k) => el("option", { value: k })));
   pal.value = "";
-  $("#d-actor").hidden = !m.actor;
+  $("#d-actor").hidden = !supportsCharacter(fx);
+  $("#d-character-controls").hidden = !supportsCharacter(fx);
+  const style = $("#d-character-style");
+  style.replaceChildren(...["", "random", ...CHARACTER_STYLES].map((value) => el("option", { value })));
+  style.value = characterChoice.style;
+  $("#d-character-seed").value = characterChoice.seed;
+  updateCharacter();
   $("#d-actor").setAttribute("aria-pressed", "true");
   $("#d-flip").setAttribute("aria-pressed", "false");
   $("#d-play").setAttribute("aria-pressed", "true");
@@ -290,16 +317,24 @@ function code(fx) {
   const v = fx.id.split("/")[1].replace(/-(\w)/g, (_, c) => c.toUpperCase());
   const opts = { x: 160, y: 120, ...(detail.opts.palette ? { palette: "[…]" } : {}), ...(detail.flip ? { flip: true } : {}) };
   const acted = !!fx.mod.act, make = acted ? "createAct" : "createFx";
+  const actor = detail.opts.actor;
+  const drawCharacter = actor && !acted;
   $("#d-code").textContent = [
-    `import { createFrame, ${make}, composite } from "pixelfx";`,
+    `import { createFrame, ${make}, composite${actor ? ", createCharacter" : ""}${drawCharacter ? ", painterFor, drawActor, actorAlphaOf" : ""} } from "pixelfx";`,
     `import * as ${v} from "pixelfx/fx/${fx.id}";`,
     ``,
     `const frame = createFrame(320, 180);`,
-    `const fx = ${make}(${v}, ${JSON.stringify(opts).replace(/"\[…\]"/, "[…]").replace(/"(\w+)":/g, "$1: ").replace(/,/g, ", ")});`,
+    ...(actor ? [`const actor = createCharacter({ style: "${actor.style}", seed: ${actor.seed} });`] : []),
+    `const fx = ${make}(${v}, ${JSON.stringify(opts).replace(/"\[…\]"/, "[…]").replace(/"(\w+)":/g, "$1: ").replace(/,/g, ", ").replace(/}$/, actor ? ", actor }" : "}")});`,
     ``,
     `// ${t("tickComment")}`,
     `fx.update(dt);`,
-    `fx.draw(frame);          // ${t("buffersComment")}`,
+    ...(drawCharacter ? [
+      `fx.draw(frame, "back");`,
+      `const time = fx.meta.loop ? fx.t % fx.meta.duration : Math.min(fx.t, fx.meta.duration);`,
+      `drawActor(painterFor(frame).place(160, 120, ${detail.flip}), actor, actorAlphaOf(${v}, time, fx.options));`,
+      `fx.draw(frame, "front");`,
+    ] : [`fx.draw(frame);          // ${t("buffersComment")}`]),
     `composite(frame, imageData.data, null);`,
     ...(acted ? [``, `// ${t("actComment", { name: v })}`] : []),
   ].join("\n");
@@ -355,6 +390,22 @@ function wireDetail() {
     // with an act, the character is the performance: off shows the effect alone, as a sprite sheet has it
     if (detail.fx.mod.act) detail.layout(detail.aspect, detail.pad);
     detail.dirty = true;
+  });
+  $("#d-character-style").addEventListener("change", (e) => {
+    characterChoice.style = e.target.value;
+    updateCharacter();
+  });
+  const seed = $("#d-character-seed");
+  seed.addEventListener("change", () => {
+    if (seed.validity.valid) {
+      characterChoice.seed = seed.valueAsNumber;
+      updateCharacter();
+    } else seed.value = characterChoice.seed;
+  });
+  $("#d-character-roll").addEventListener("click", () => {
+    characterChoice.seed = crypto.getRandomValues(new Uint32Array(1))[0];
+    seed.value = characterChoice.seed;
+    updateCharacter();
   });
   $("#d-seed").addEventListener("click", () => {
     detail.opts.seed = 1 + Math.floor(Math.random() * 9999);
