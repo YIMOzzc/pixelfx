@@ -193,24 +193,141 @@ function ellipsoid(c, R, r, part, mat) {
     }
 }
 // parts: each has its own number, so edges between them can be seen
-const PART = { pelvis: 1, waist: 2, chest: 3, neck: 4, head: 5, face: 6, upperN: 7, elbowN: 8, foreN: 9, handN: 10, upperF: 11, elbowF: 12, foreF: 13, handF: 14, thighN: 15, kneeN: 16, shinN: 17, footN: 18, thighF: 19, kneeF: 20, shinF: 21, footF: 22, weapon: 23, offWeapon: 24 };
+const PART = { pelvis: 1, waist: 2, chest: 3, neck: 4, head: 5, face: 6, upperN: 7, elbowN: 8, foreN: 9, handN: 10, upperF: 11, elbowF: 12, foreF: 13, handF: 14, thighN: 15, kneeN: 16, shinN: 17, footN: 18, thighF: 19, kneeF: 20, shinF: 21, footF: 22, weapon: 23, offWeapon: 24, backGear: 25, helmet: 26, topGear: 27, belt: 28, wings: 29 };
 const useFrame = (name) => { curFrameIndex = FRAME_IDS.indexOf(name); };
+
+// Equipment shares the body's depth buffer and uses the local axes of its attachment bone.
+function equipmentAt({ t, R }, part) {
+  const at = (p) => add(t, mv(R, p));
+  return {
+    plate: (p, radii, mat) => ellipsoid(at(p), R, radii, part, mat),
+    strip: (a, b, ra, rb, mat) => sweep(at(a), at(b), ra, rb, part, mat),
+  };
+}
+
+function drawBackGear(B, gear) {
+  const { plate, strip: trimCape } = equipmentAt(B.chest, PART.backGear);
+  if (gear.cape === "mantle") {
+    plate([-5.4, -6.7, -0.5], [2.5, 9.6, 4.6], 5);
+    trimCape([-4.7, 0.7, 3.3], [-7.1, -12, 3.6], 0.75, 0.8, 3);
+  } else if (gear.cape === "split") {
+    for (const z of [-2.8, 2.8]) {
+      plate([-5.1, -6.1, z], [2.6, 8.8, 1.75], 5);
+      trimCape([-4.3, 0, z + 0.6], [-6.5, -13.3, z + 0.55], 0.75, 0.5, 3);
+    }
+  }
+  if (!gear.wings || gear.wings === "none") return;
+  const { strip } = equipmentAt(B.chest, PART.wings);
+  for (const side of [-1, 1]) {
+    const root = [-4.5, -0.9, side * 2.4], elbow = [-7.8, 3.2, side * 7.6];
+    strip(root, elbow, 1.7, 1.55, gear.wings === "crystal" ? 9 : 6);
+    if (gear.wings === "bat") {
+      const tip = [-12, 7.5, side * 15];
+      for (const [x, y, z] of [[-12, -1, 13], [-10, -4, 10], [-7, -6, 6]]) {
+        const claw = [x, y, side * z];
+        for (let j = 0; j <= 1; j += 0.125) {
+          strip(elbow, add(mul(tip, j), mul(claw, 1 - j)), 0.95, 0.68, 5);
+        }
+        strip(elbow, claw, 0.85, 0.65, 6);
+      }
+      strip(elbow, tip, 1.1, 0.55, 6);
+    } else {
+      const crystal = gear.wings === "crystal";
+      for (let j = 4; j >= 0; j--) {
+        const base = [-6.1 - j * 0.35, 3.4 - j * 1.45, side * (6.5 - j * 0.45)];
+        const tip = [-11 - j * 0.66, (crystal ? 8 : 6) - j * 3.4, side * (16 - j * 2.05)];
+        if (crystal) {
+          const facet = add(mul(base, 0.65), mul(tip, 0.35));
+          strip(base, facet, 1, 2, 9);
+          strip(facet, tip, 2, 0.55, 9);
+          strip(add(facet, [0.1, 1.4, 0.4]), tip, 0.72, 0.55, 6);
+        } else {
+          strip(base, tip, 2, 0.58, 6);
+          strip(add(base, [0, 0.6, 0.6]), add(mul(base, 0.35), mul(tip, 0.65)), 0.9, 0.65, 7);
+        }
+      }
+    }
+  }
+}
+
+function drawHeadGear(B, gear) {
+  const { plate, strip } = equipmentAt(B.head, PART.helmet);
+  if (gear.headgear === "visor") {
+    plate([1.3, -0.4, 0], [2.9, 2.28, 3.15], 6);
+    strip([3.35, 0.7, -1.8], [3.35, 0.7, 2.75], 0.76, 0.77, 3);
+  } else if (gear.headgear === "horns") {
+    for (const z of [-2.3, 2.3]) {
+      const bend = [-2.6, 3.8, z * 1.46];
+      strip([-1.15, 1.1, z], bend, 1.22, 0.91, 6);
+      strip(bend, [-1.2, 5.8, z * 1.65], 0.91, 0.54, 7);
+    }
+  } else if (gear.headgear === "hood") {
+    plate([-1.35, -1.2, 0], [3.25, 3.2, 3.8], 5);
+    strip([1, 2.1, -2.2], [1, 2.1, 2.6], 1.05, 1, 6);
+  } else if (gear.headgear === "circlet") {
+    plate([1.05, 1.8, 0], [2.65, 0.85, 2.75], 7);
+    plate([3.25, 2, 1], [0.86, 1.25, 0.95], 3);
+  }
+  if (gear.accessory === "goggles") {
+    for (const z of [-1.5, 1.65]) {
+      plate([3.8, 0.4, z], [1.05, 1.18, 1.25], 7);
+      plate([4.5, 0.5, z], [0.65, 0.84, 0.88], 3);
+    }
+  }
+}
+
+function drawTorsoGear(B, gear) {
+  const chest = equipmentAt(B.chest, PART.topGear);
+  if (gear.top === "plate") {
+    chest.plate([2.4, 0.8, 0.35], [1.9, 3.65, 4.3], 6);
+    chest.strip([3.6, 2.2, -2.5], [3.6, 2.2, 3], 0.82, 0.86, 7);
+    chest.strip([3.65, -0.2, -2.8], [3.65, -0.2, 3.2], 0.74, 0.76, 7);
+  } else if (gear.top === "tunic") {
+    chest.plate([0.65, 0.25, 0], [3.55, 4.1, 4.5], 5);
+    chest.strip([3.2, 2.1, 3.2], [3.55, -2.9, -1.3], 1, 0.75, 7);
+  } else if (gear.top === "jacket") {
+    chest.plate([0.7, 0.6, 0], [3.6, 4.2, 5], 5);
+    for (const z of [-2.5, 2.5]) chest.strip([2.8, 3.55, z], [4.05, -0.6, z * 0.45], 1.16, 0.72, 6);
+  }
+  if (gear.accessory === "brooch") chest.plate([3.8, 2.35, 3.4], [1.35, 1.32, 1.2], 3);
+
+  if (gear.belt) {
+    useFrame("pelvis");
+    const { plate, strip } = equipmentAt(B.pelvis, PART.belt);
+    plate([0.8, 1.7, 0.3], [4.3, 1.27, 5.1], gear.belt === "sash" ? 5 : gear.belt === "buckle" ? 6 : 8);
+    if (gear.belt === "buckle") plate([5.25, 1.8, 3], [1.08, 1.15, 1.32], 7);
+    if (gear.belt === "pouches") {
+      plate([-2.25, 0.05, 5.2], [2.1, 2.15, 1.45], 8);
+      strip([-3.5, 1.05, 6.0], [-0.95, 1.05, 6.05], 0.7, 0.68, 7);
+    }
+    if (gear.belt === "sash") strip([2.65, 1.95, 5.1], [0, -4.8, 5.85], 1.2, 0.85, 7);
+  }
+}
+
+const GEAR_RAMPS = {
+  6: ["#faf0db", "#bdc8db", "#7586aa", "#3e4b6f"].map(hex),
+  7: ["#fff1b0", "#edca74", "#ad7845", "#6e483e"].map(hex),
+  8: ["#d29c68", "#9a634d", "#5d3b3b", "#362b38"].map(hex),
+  9: ["#defffb", "#82dbec", "#4e8bcb", "#414981"].map(hex),
+};
 
 function drawBody(S, look) {
   const { B, armN, armF, legN, legF, sN, sF, hipN, hipF, turn } = S, F_ = (name) => B[name];
+  const gear = look?.gear;
   useFrame("pelvis");
   ellipsoid(add(F_("pelvis").t, mv(F_("pelvis").R, [0, -0.2, 0])), F_("pelvis").R, [2.9, 2.6, 4.2], PART.pelvis, 0);
-  if (look?.robe) {
+  if (look?.robe && !gear?.pants) {
     const { t, R } = B.pelvis;
     const at = (x, y, z) => add(t, mv(R, [x, y, z]));
     ellipsoid(at(-0.7, -7.5, 0), R, [4.9, 8.5, 5.6], PART.pelvis, 0);
     sweep(at(-2.4, -12, -2), at(-2.4, -12, 3.2), 2, 2.4, PART.pelvis, 0);
     sweep(at(2, -1.3, 3.25), at(2.2, -12.7, 3.9), 0.85, 0.65, PART.pelvis, 4);
-    ellipsoid(at(0, 1.7, 0), R, [3.65, 1.3, 4.6], PART.pelvis, 4);
+    if (!gear?.belt) ellipsoid(at(0, 1.7, 0), R, [3.65, 1.3, 4.6], PART.pelvis, 4);
   }
   useFrame("waist");
   sweep(F_("pelvis").t, F_("chest").t, 3, 3.3, PART.waist, 1);
   useFrame("chest");
+  if (gear) drawBackGear(B, gear);
   if (look?.cloak) {
     const { t, R } = B.chest;
     ellipsoid(add(t, mv(R, [-6.1, -6.9, -1.0])), R, [2.1, 9.4, 3.6], PART.chest, 1);
@@ -221,6 +338,7 @@ function drawBody(S, look) {
     const at = (x, y, z) => add(t, mv(R, [x, y, z]));
     sweep(at(1, 3, 3.05), at(3.05, -1, 1.8), 0.85, 0.65, PART.chest, 4);
   }
+  if (gear) drawTorsoGear(B, gear);
   useFrame("neck");
   sweep(F_("neck").t, add(F_("neck").t, mv(F_("head").R, [0, 1.6, 0])), 1.25, 1.15, PART.neck, 1);
   useFrame("head");
@@ -241,6 +359,7 @@ function drawBody(S, look) {
     const { t, R } = B.head;
     ellipsoid(add(t, mv(R, look.crest.offset)), R, look.crest.radii, PART.head, 3);
   }
+  if (gear) drawHeadGear(B, gear);
   const arm = (far, A, sh, up, el, fo, ha, nameU, nameF) => {
     curDim = far ? 1 : 0;
     useFrame(nameU);
@@ -255,6 +374,11 @@ function drawBody(S, look) {
     } else {
       sweep(A.joint, A.end, 1.6, 1.2, fo, 0, 0.15);
     }
+    if (gear?.accessory === "bracers") {
+      const cuff = add(A.joint, mul(sub(A.end, A.joint), 0.53));
+      sweep(cuff, A.end, 2.1, 1.65, fo, 6);
+      sphere(cuff, 2.1, fo, 7);
+    }
     sphere(A.end, look?.robe ? 1.55 : 1.9, ha, look?.robe ? 3 : 0);
     curDim = 0;
   };
@@ -262,13 +386,21 @@ function drawBody(S, look) {
   arm(true, armF, sF, PART.upperF, PART.elbowF, PART.foreF, PART.handF, "upperF", "foreF");
   const leg = (far, L, hip, th, kn, sh, fo, nameT, nameS, nameFt) => {
     useFrame(nameT);
-    sweep(hip, L.joint, 3.2, 2.2, th, 0);
+    const pants = gear?.pants;
+    const boots = gear?.boots;
+    sweep(hip, L.joint, pants === "cargo" ? 3.5 : 3.2, 2.2, th, pants ? 5 : 0);
+    if (pants === "cargo") equipmentAt(B[nameT], th).plate([4.1, 1.95, 1.95], [2.05, 1.5, 1.35], 8);
     sphere(L.joint, 1.9, kn, 1);
     useFrame(nameS);
-    sweep(L.joint, L.end, 2.15, 1.4, sh, 0, 0.4);
+    sweep(L.joint, L.end, 2.15, 1.4, sh, pants === "greaves" ? 6 : pants ? 5 : 0, 0.4);
+    if (boots) {
+      const cuff = add(L.end, mul(sub(L.joint, L.end), boots === "travel" ? 0.48 : 0.32));
+      sweep(cuff, L.end, 2.05, 1.6, sh, boots === "sabaton" ? 6 : 8);
+      sphere(cuff, 2.14, sh, boots === "leather" ? 8 : 7);
+    }
     useFrame(nameFt);
     const R = F_(nameFt).R, a = F_(nameFt).t;
-    sweep(add(a, mv(R, [-1.5, -0.6, 0])), add(a, mv(R, [4.6, -1.1, 0])), 1.7, 1.25, fo, 0);
+    sweep(add(a, mv(R, [-1.5, -0.6, 0])), add(a, mv(R, [4.6, -1.1, 0])), 1.7, 1.25, fo, boots === "sabaton" ? 6 : boots ? 8 : 0);
   };
   leg(false, legN, hipN, PART.thighN, PART.kneeN, PART.shinN, PART.footN, "thighN", "shinN", "footN");
   leg(true, legF, hipF, PART.thighF, PART.kneeF, PART.shinF, PART.footF, "thighF", "shinF", "footF");
@@ -276,7 +408,9 @@ function drawBody(S, look) {
 }
 
 // ---- what they hold: drawn along the handle from the fist, through the same depth buffer
-function along(H, axis, side, part) {
+function along(H, axis, side, part, scale = 1) {
+  axis = mul(axis, scale);
+  side = mul(side, scale);
   const n = cross(axis, side);
   const T = (i, k, c, lift = 0) => {
     const x = H[0] + axis[0] * i + side[0] * k + n[0] * lift, y = H[1] + axis[1] * i + side[1] * k + n[1] * lift, z = H[2] + axis[2] * i + side[2] * k + n[2] * lift;
@@ -418,6 +552,8 @@ function finish(S, restFrames, look) {
     let ramp = Mat[i] === 1 ? CORE : SHELL;
     if (look) {
       if (Mat[i] === 1) ramp = look.core;
+      else if (Mat[i] === 5) ramp = look.fabric;
+      else if (Mat[i] >= 6) ramp = GEAR_RAMPS[Mat[i]];
       else if (Mat[i] === 4) ramp = look.robeTrim;
       else if (Mat[i] === 3 || Part[i] === PART.face) ramp = look.trim;
       else if (Part[i] === PART.head) ramp = look.helm;
@@ -449,12 +585,14 @@ function finish(S, restFrames, look) {
   const list = touched.slice(), ring = new Map();
   for (const i of list) for (const d of [-1, 1, -BW, BW]) { const j = i + d; if (Part[j] === 0 && !ring.has(j)) ring.set(j, i); }
   const n = list.length + ring.size, out = { n, xs: new Int16Array(n), ys: new Int16Array(n), color: new Uint32Array(n), src: new Int16Array(n), ink: new Uint8Array(n), x0: 0, y0: 0, x1: 0, y1: 0 };
+  const bounds = look?.bounds;
+  const { x: left, y: top, w: width, h: height } = bounds ?? { x: -12, y: -38, w: W0, h: H0 };
   const srcFor = (i) => {
     const f = Fr[i];
     if (f < 0 || !restFrames) return -1;
     const name = FRAME_IDS[f], A = B[name], R0 = restFrames[name], wx = (i % BW) - OX, wy = OY - ((i / BW) | 0), P = [wx, wy, Zb[i]];
-    const lp = tv(A.R, sub(P, A.t)), rp = add(R0.t, mv(R0.R, lp)), c = Math.round(rp[0]) + 12, r = 38 - Math.round(rp[1]);
-    return c < 0 || r < 0 || c >= W0 || r >= H0 ? -1 : r * W0 + c;
+    const lp = tv(A.R, sub(P, A.t)), rp = add(R0.t, mv(R0.R, lp)), c = Math.round(rp[0]) - left, r = -Math.round(rp[1]) - top;
+    return c < 0 || r < 0 || c >= width || r >= height ? -1 : r * width + c;
   };
   let k = 0, x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
   const push = (i, c, s, isInk) => {
@@ -463,6 +601,17 @@ function finish(S, restFrames, look) {
     if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
     k++;
   };
+  if (look?.gear) {
+    out.eyes = [];
+    out.headY = -Math.round(B.head.t[1]) - 3;
+    for (const i of list) {
+      if (Part[i] === PART.head || Part[i] === PART.helmet) out.headY = Math.min(out.headY, ((i / BW) | 0) - OY - 1);
+      if ((Part[i] === PART.face || Part[i] === PART.helmet) && look.trim.includes(Col[i] | 0)) {
+        const y = ((i / BW) | 0) - OY;
+        if (Math.abs(y + B.head.t[1]) <= 1.3) out.eyes.push([(i % BW) - OX, y]);
+      }
+    }
+  }
   for (const i of list) push(i, Col[i], srcFor(i), Col[i] === INK);
   for (const [j, i] of ring) push(j, INK, srcFor(i), true);
   let zs = 0;
@@ -491,7 +640,10 @@ function render(pose, look) {
   clipWeapon = !air;
   drawBody(S, look);
   clipBody = false;
-  if (S.W) S.W.draw(along(S.armN.end, S.axis, S.side, PART.weapon), q, S.armF.end);
+  if (S.W) {
+    const scale = armedPose !== pose && look?.gear?.weapon === "bow" ? 0.82 : 1;
+    S.W.draw(along(S.armN.end, S.axis, S.side, PART.weapon, scale), q, S.armF.end);
+  }
   if (S.OW) {
     const sb = q.sb ?? Math.PI;
     let ax = [Math.cos(sb), -Math.sin(sb), 0], sd = [-Math.sin(sb), -Math.cos(sb), 0];
@@ -499,7 +651,8 @@ function render(pose, look) {
     S.OW.draw(along(S.armF.end, ax, sd, PART.offWeapon), q, S.armF.end);
   }
   clipWeapon = false;
-  return finish(S, REST_FRAMES, look);
+  const restFrames = look?.gear && look.weapon ? solve(look.weapon).B : REST_FRAMES;
+  return finish(S, restFrames, look);
 }
 REST_FRAMES = solve({}).B;
 
@@ -520,7 +673,7 @@ export function shortfall(pose) {
 }
 /** The pixels of a pose: { n, xs, ys, color, src, ink, x0, y0, x1, y1 }, in local space with the feet at (0, 0). */
 export function posed(pose, look) {
-  const key = (look ? look.id + ":" : "") + keyOf(pose);
+  const key = (look ? look.id + (look.bounds ? ":fitted:" : ":") : "") + keyOf(pose);
   let r = CACHE.get(key);
   if (!r) {
     if (CACHE.size > 6000) CACHE.clear();

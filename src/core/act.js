@@ -173,17 +173,17 @@ HERO2.forEach((row, r) => [...row].forEach((ch, c) => {
 }));
 
 // every cell of the standing sprite, mapped to the nearest cell that's on the body
-function nearestBody(mask) {
-  const nearest = new Int16Array(24 * 38).fill(-1);
-  for (let r = 0; r < 38; r++)
-    for (let c = 0; c < 24; c++) {
+function nearestBody(mask, w = 24, h = 38) {
+  const nearest = new Int16Array(w * h).fill(-1);
+  for (let r = 0; r < h; r++)
+    for (let c = 0; c < w; c++) {
       let best = -1, bd = 1e9;
-      for (let y = Math.max(0, r - 7); y < Math.min(38, r + 8); y++)
-        for (let x = Math.max(0, c - 7); x < Math.min(24, c + 8); x++) {
+      for (let y = Math.max(0, r - 7); y < Math.min(h, r + 8); y++)
+        for (let x = Math.max(0, c - 7); x < Math.min(w, c + 8); x++) {
           const d = (x - c) * (x - c) + (y - r) * (y - r);
-          if (mask[y * 24 + x] && d < bd) { bd = d; best = y * 24 + x; }
+          if (mask[y * w + x] && d < bd) { bd = d; best = y * w + x; }
         }
-      nearest[r * 24 + c] = best;
+      nearest[r * w + c] = best;
     }
   return nearest;
 }
@@ -217,10 +217,11 @@ export function createAct(mod, o = {}) {
   const look = character?.appearance;
   const restMask = look ? character.mask.data : REST_MASK;
   const restPixels = look ? character.pixels : REST_PX;
+  const { w: restW, h: restH, x: restX, y: restY } = look ? character : { w: 24, h: 38, x: -12, y: -38 };
   let nearest = NEAREST;
   if (look && a.onBody) {
     nearest = characterMaps.get(character);
-    if (!nearest) characterMaps.set(character, (nearest = nearestBody(restMask)));
+    if (!nearest) characterMaps.set(character, (nearest = nearestBody(restMask, restW, restH)));
   }
   const X = o.x ?? 0, Y = o.y ?? 0;
   const targets = (a.targets ?? (a.target ? [a.target] : [])).map((g, i) => new Target(g.x ?? 66, seed + 4 + i));
@@ -397,8 +398,8 @@ export function createAct(mod, o = {}) {
         return [Math.round(lean * k + rx * f), Math.round(cr * k + ry * f)];
       };
       const rest = (sx, sy) => {
-        const c = (flip ? FX - sx - 1 : sx - FX) + 12, r0 = sy - FY + 38;
-        return c >= 0 && r0 >= 0 && c < 24 && r0 < 38 && restMask[r0 * 24 + c] === 1;
+        const c = (flip ? FX - sx - 1 : sx - FX) - restX, r0 = sy - FY - restY;
+        return c >= 0 && r0 >= 0 && c < restW && r0 < restH && restMask[r0 * restW + c] === 1;
       };
       const C = frame.color, Ls = frame.light;
       const copy = (buf, sx, sy, s) => {
@@ -424,7 +425,8 @@ export function createAct(mod, o = {}) {
         }
       drawGhosts();
       const restIndex = (s) => {
-        const c = s % 24, r0 = (s / 24) | 0, sx = flip ? FX - (c - 12) - 1 : FX + c - 12, sy = FY + r0 - 38;
+        const x = s % restW + restX, y = ((s / restW) | 0) + restY;
+        const sx = flip ? FX - x - 1 : FX + x, sy = FY + y;
         return sx >= 0 && sy >= 0 && sx < W && sy < H ? sy * W + sx : -1;
       };
       for (let i = 0; i < r.n; i++) {

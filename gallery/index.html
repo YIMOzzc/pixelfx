@@ -57,6 +57,17 @@
           <input id="d-character-seed" class="btn" type="number" min="0" max="4294967295" step="1" required>
           <button class="btn" id="d-character-roll" type="button" data-i18n="rollCharacter">随机生成</button>
         </div>
+        <details id="d-equipment" hidden>
+          <summary data-i18n="equipment">装备搭配</summary>
+          <div class="equipment-editor">
+            <canvas id="d-equipment-preview" role="img" data-i18n-aria-label="equipmentPreview" aria-label="装备站姿预览"></canvas>
+            <div id="d-equipment-slots"></div>
+          </div>
+          <div class="row">
+            <button class="btn" id="d-equipment-random" type="button" data-i18n="randomEquipment">随机整套</button>
+            <button class="btn" id="d-equipment-reset" type="button" data-i18n="resetEquipment">恢复风格装备</button>
+          </div>
+        </details>
         <div class="row"><label data-i18n="show">显示</label><button class="btn" id="d-flip" type="button" data-i18n="mirror">镜像</button><button class="btn" id="d-actor" type="button" data-i18n="character">角色</button><button class="btn" id="d-make" type="button" data-i18n="spriteSheet">精灵图</button></div>
       </div>
       <div class="code-head"><span data-i18n="use">使用示例</span><span><a id="d-src" target="_blank" rel="noopener" data-i18n="source">源码</a> · <button class="btn" id="d-copy" type="button" data-i18n="copy">复制</button></span></div>

@@ -2,7 +2,7 @@
 // opens one effect with its options, a sprite sheet and the code to use it.
 
 import { effects, categories } from "../src/fx/index.js";
-import { createFrame, clearFrame, createFx, createAct, actBounds, composite, backdrop, drawActor, painterFor, stockActor, createCharacter, CHARACTER_STYLES, actorAlphaOf, PAL, BACKDROPS } from "../src/core/index.js";
+import { createFrame, clearFrame, createFx, createAct, actBounds, composite, backdrop, drawActor, painterFor, stockActor, createCharacter, CHARACTER_STYLES, CHARACTER_EQUIPMENT, actorAlphaOf, PAL, BACKDROPS } from "../src/core/index.js";
 import { i18n, t, LANGUAGES } from "./i18n.js";
 
 const REPO = "https://github.com/patch-gg/pixelfx";
@@ -44,7 +44,15 @@ class Player {
     const acted = this.acted, b = acted ? { ...actBounds(this.fx.mod, this.opts.actor) } : null;
     // an act happens above the floor: don't spend the tile on bricks
     if (b) b.y1 = Math.min(b.y1, 22);
-    const [w, h] = acted ? [b.x1 - b.x0, b.y1 - b.y0] : this.fx.meta.size, [ox, oy] = acted ? [-b.x0, -b.y0] : this.fx.meta.origin;
+    const [mw, mh] = this.fx.meta.size, [mx, my] = this.fx.meta.origin;
+    const actor = !acted && this.actor && this.opts.actor?.equipment ? this.opts.actor : null;
+    if (b && this.flip && this.opts.actor?.equipment) [b.x0, b.x1] = [-b.x1, -b.x0];
+    const actorX = actor ? (this.flip ? -actor.x - actor.w : actor.x) : 0;
+    const left = Math.min(-mx, actorX), top = Math.min(-my, actor?.y ?? 0);
+    const right = Math.max(mw - mx, actorX + (actor?.w ?? 0));
+    const bottom = Math.max(mh - my, actor ? actor.y + actor.h : 0);
+    const [w, h] = acted ? [b.x1 - b.x0, b.y1 - b.y0] : actor ? [right - left, bottom - top] : [mw, mh];
+    const [ox, oy] = acted ? [-b.x0, -b.y0] : actor ? [-left, -top] : [mx, my];
     this.W = Math.ceil(Math.max(w * (acted ? Math.min(pad, 1.1) : pad), h * (acted ? Math.min(pad, 1.1) : pad) * aspect));
     this.H = Math.ceil(this.W / aspect);
     this.x = Math.floor((this.W - w) / 2) + ox;
@@ -200,16 +208,48 @@ function filter() {
 
 // ---- detail
 let detail = null;
-const characterChoice = { style: "", seed: 1 };
+const characterChoice = { style: "", seed: 1, equipment: {} };
+const equipmentSelects = {};
+function buildEquipmentControls() {
+  for (const [slot, choices] of Object.entries(CHARACTER_EQUIPMENT)) {
+    const id = `equipment-${slot}`;
+    const select = el("select", { id, className: "btn" }, ["", "random", ...choices].map((value) => el("option", { value })));
+    select.addEventListener("change", () => {
+      if (select.value) characterChoice.equipment[slot] = select.value;
+      else delete characterChoice.equipment[slot];
+      updateCharacter();
+    });
+    equipmentSelects[slot] = select;
+    $("#d-equipment-slots").append(el("div", { className: "row" }, [el("label", { htmlFor: id }), select]));
+  }
+}
+
+function previewEquipment(actor) {
+  const canvas = $("#d-equipment-preview"), ctx = canvas.getContext("2d");
+  const size = Math.max(46, actor.w + 4, actor.h + 4);
+  canvas.width = canvas.height = size;
+  const frame = createFrame(size, size), image = ctx.createImageData(size, size);
+  const x = Math.floor((size - actor.w) / 2) - actor.x;
+  const y = Math.floor((size - actor.h) / 2) - actor.y;
+  drawActor(painterFor(frame).place(x, y), actor);
+  composite(frame, image.data, null);
+  ctx.putImageData(image, 0, 0);
+}
+
 function updateCharacter() {
   const enabled = supportsCharacter(detail.fx) && characterChoice.style;
+  const hadEquipment = !!detail.opts.actor?.equipment;
   if (enabled) {
-    const { style, seed } = characterChoice;
-    detail.opts.actor = createCharacter({ style: style === "random" ? undefined : style, seed });
+    const { style, seed, equipment } = characterChoice;
+    detail.opts.actor = createCharacter({ style: style === "random" ? undefined : style, seed, equipment });
+    previewEquipment(detail.opts.actor);
   } else delete detail.opts.actor;
   $("#d-character-seed").disabled = !enabled;
   $("#d-character-roll").disabled = !enabled;
-  if (detail.acted) detail.layout(detail.aspect, detail.pad);
+  $("#d-equipment").hidden = !enabled;
+  for (const [slot, select] of Object.entries(equipmentSelects)) select.value = characterChoice.equipment[slot] ?? "";
+  equipmentText();
+  if (detail.acted || hadEquipment || detail.opts.actor?.equipment) detail.layout(detail.aspect, detail.pad);
   else detail.restart();
   $("#d-sheet").replaceChildren();
   code(detail.fx);
@@ -259,7 +299,19 @@ function detailText() {
   );
   for (const option of $("#d-pal").options) option.textContent = t(option.value ? `palettes.${option.value}` : "ownPalette");
   for (const option of $("#d-character-style").options) option.textContent = t(`characterStyles.${option.value || "stock"}`);
+  equipmentText();
   $("#d-play").textContent = t(detail.playing ? "pause" : "play");
+}
+
+function equipmentText() {
+  for (const [slot, select] of Object.entries(equipmentSelects)) {
+    const rolled = select.value === "random" && detail.opts.actor?.equipment?.[slot];
+    select.previousElementSibling.textContent = t(`equipmentSlots.${slot}`);
+    for (const option of select.options) {
+      const name = t(`equipmentOptions.${option.value || "inherit"}`);
+      option.textContent = option.value === "random" && rolled ? `${name} · ${t(`equipmentOptions.${rolled}`)}` : name;
+    }
+  }
 }
 
 /** Open a fresh preview; the stable effect ID remains the source/export identifier in either language. */
@@ -319,12 +371,13 @@ function code(fx) {
   const acted = !!fx.mod.act, make = acted ? "createAct" : "createFx";
   const actor = detail.opts.actor;
   const drawCharacter = actor && !acted;
+  const gear = actor?.equipment ? `, equipment: ${JSON.stringify(actor.equipment)}` : "";
   $("#d-code").textContent = [
     `import { createFrame, ${make}, composite${actor ? ", createCharacter" : ""}${drawCharacter ? ", painterFor, drawActor, actorAlphaOf" : ""} } from "pixelfx";`,
     `import * as ${v} from "pixelfx/fx/${fx.id}";`,
     ``,
     `const frame = createFrame(320, 180);`,
-    ...(actor ? [`const actor = createCharacter({ style: "${actor.style}", seed: ${actor.seed} });`] : []),
+    ...(actor ? [`const actor = createCharacter({ style: "${actor.style}", seed: ${actor.seed}${gear} });`] : []),
     `const fx = ${make}(${v}, ${JSON.stringify(opts).replace(/"\[…\]"/, "[…]").replace(/"(\w+)":/g, "$1: ").replace(/,/g, ", ").replace(/}$/, actor ? ", actor }" : "}")});`,
     ``,
     `// ${t("tickComment")}`,
@@ -381,16 +434,18 @@ function wireDetail() {
   $("#d-flip").addEventListener("click", (e) => {
     detail.flip = !detail.flip;
     e.target.setAttribute("aria-pressed", String(detail.flip));
-    detail.restart();
+    if (detail.opts.actor?.equipment) detail.layout(detail.aspect, detail.pad);
+    else detail.restart();
     code(detail.fx);
   });
   $("#d-actor").addEventListener("click", (e) => {
     detail.actor = !detail.actor;
     e.target.setAttribute("aria-pressed", String(detail.actor));
     // with an act, the character is the performance: off shows the effect alone, as a sprite sheet has it
-    if (detail.fx.mod.act) detail.layout(detail.aspect, detail.pad);
+    if (detail.fx.mod.act || detail.opts.actor?.equipment) detail.layout(detail.aspect, detail.pad);
     detail.dirty = true;
   });
+  buildEquipmentControls();
   $("#d-character-style").addEventListener("change", (e) => {
     characterChoice.style = e.target.value;
     updateCharacter();
@@ -405,6 +460,14 @@ function wireDetail() {
   $("#d-character-roll").addEventListener("click", () => {
     characterChoice.seed = crypto.getRandomValues(new Uint32Array(1))[0];
     seed.value = characterChoice.seed;
+    updateCharacter();
+  });
+  $("#d-equipment-random").addEventListener("click", () => {
+    characterChoice.equipment = Object.fromEntries(Object.keys(CHARACTER_EQUIPMENT).map((slot) => [slot, "random"]));
+    $("#d-character-roll").click();
+  });
+  $("#d-equipment-reset").addEventListener("click", () => {
+    characterChoice.equipment = {};
     updateCharacter();
   });
   $("#d-seed").addEventListener("click", () => {

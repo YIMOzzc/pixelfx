@@ -150,27 +150,34 @@ wherever he goes: each pixel of a pose knows which pixel of the standing body it
 
 ### Generate a character
 
-In the gallery, select **With characters**, open an effect, and choose Knight, Ranger, Android, or Seeded style under
-Appearance. The character seed controls the appearance independently of the effect seed. The same style and
-seed recreate the same character. Each design shares the existing humanoid skeleton and supplies a matching
-24 × 38 rest sprite and mask for effects that wrap or recolor the body.
+In the gallery, select **With characters**, open an effect, and choose a base style under **Appearance**.
+Open **Equipment** to mix headgear, tops, belts, pants, boots, capes, accessories, wings, and weapons.
+Each slot can use the style default, a specific item, or a seeded random item. **Randomize outfit** rolls all slots.
+The same style, seed, and equipment recreate the same character.
 
 ```js
 import { createAct, createCharacter } from "pixelfx";
 import * as freeze from "pixelfx/fx/ice/freeze";
 
-const actor = createCharacter({ style: "ranger", seed: 42 });
+const actor = createCharacter({
+  style: "ranger",
+  seed: 42,
+  equipment: { headgear: "hood", top: "tunic", belt: "pouches", wings: "crystal", weapon: "bow" },
+});
 const act = createAct(freeze, { actor, x: 160, y: 120 });
 ```
 
-Omit `style` to choose it from the seed. The result also works as the `actor` option to `createFx`.
-Export a transparent standing sprite or bake a full animation with the generated character.
+Omit `style` to choose it from the seed, or omit `equipment` for the original 24 × 38 sprite.
+`CHARACTER_EQUIPMENT` lists the valid values per slot. The rest sprite and its mask expand to fit equipment,
+with the feet still at the origin. Use the returned `x`, `y`, `w` and `h` for sprite placement.
+A pose that specifies a weapon uses that weapon so the authored grips and effect timing line up.
+
+Export the standing sprite or bake the character and action together. Both tools accept optional `--equipment` JSON.
 
 ```sh
-node tools/character.mjs ranger 42
-node tools/act.mjs melee/sword-slash --character knight --character-seed 42 --sheet
+node tools/character.mjs ranger 42 --equipment '{"wings":"crystal","weapon":"bow"}'
+node tools/act.mjs ice/freeze --character ranger --character-seed 42 --equipment '{"wings":"crystal","weapon":"bow"}' --sheet
 ```
-
 
 The body is yours to use too: `skeleton(pose)` gives you every joint of a pose in 3D, to hang your own things on, and
 `posedParts(pose)` gives you each part drawn on its own.

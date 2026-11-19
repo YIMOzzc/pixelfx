@@ -41,10 +41,21 @@ const designs = {
   },
 };
 export const CHARACTER_STYLES = Object.freeze(Object.keys(designs));
+export const CHARACTER_EQUIPMENT = Object.freeze({
+  headgear: Object.freeze(["visor", "horns", "hood", "circlet"]),
+  top: Object.freeze(["plate", "tunic", "jacket"]),
+  belt: Object.freeze(["buckle", "pouches", "sash"]),
+  pants: Object.freeze(["cloth", "greaves", "cargo"]),
+  boots: Object.freeze(["leather", "sabaton", "travel"]),
+  cape: Object.freeze(["none", "mantle", "split"]),
+  accessory: Object.freeze(["brooch", "goggles", "bracers"]),
+  wings: Object.freeze(["none", "feather", "crystal", "bat"]),
+  weapon: Object.freeze(["none", "sword", "dagger", "spear", "hammer", "bow", "claw"]),
+});
 const SEEDED_STYLES = ["knight", "ranger", "android"];
 
-/** Generate a 24 × 38 actor whose rest sprite and animated poses use the same appearance. */
-export function createCharacter({ style, seed = 1 } = {}) {
+/** Generate an actor whose rest sprite and animated poses share the same equipment. */
+export function createCharacter({ style, seed = 1, equipment = {} } = {}) {
   if (!Number.isInteger(seed) || seed < 0 || seed > 0xffffffff) throw new RangeError("Character seed must be a uint32");
   style ??= new Rng(seed).pick(SEEDED_STYLES);
   const rng = new Rng(seed);
@@ -58,9 +69,48 @@ export function createCharacter({ style, seed = 1 } = {}) {
     core: ramp(mid, low, dark, dark), helm: hairColors ? ramp(...hairColors) : ramp(hi, mid, low, dark),
     trim: ramp(glow, glow, accent, accent),
   };
-  const w = 24, h = 38, x = -12, y = -38;
-  const pixels = new Uint32Array(w * h), data = new Uint8Array(w * h);
+  if (!equipment || typeof equipment !== "object" || Array.isArray(equipment)) {
+    throw new TypeError("Character equipment must be an object");
+  }
+  for (const [slot, value] of Object.entries(equipment)) {
+    if (!Object.hasOwn(CHARACTER_EQUIPMENT, slot) || (value !== "random" && !CHARACTER_EQUIPMENT[slot].includes(value))) {
+      throw new RangeError(`Unknown character equipment: ${slot}=${value}`);
+    }
+  }
+  const gearRng = new Rng(seed ^ 0x72f3a18b);
+  const gear = {};
+  for (const [slot, choices] of Object.entries(CHARACTER_EQUIPMENT)) {
+    const rolled = gearRng.pick(choices);
+    if (Object.hasOwn(equipment, slot)) gear[slot] = equipment[slot] === "random" ? rolled : equipment[slot];
+  }
+  const customized = Object.keys(gear).length > 0;
+  if (customized) {
+    Object.assign(appearance, { gear, fabric: ramp(mid, low, dark, dark), id: `${appearance.id}/${JSON.stringify(gear)}` });
+    if (gear.headgear) {
+      appearance.hair = false;
+      appearance.crest = undefined;
+      appearance.helm = appearance.shell;
+      appearance.helmet = gear.headgear === "hood" ? [4, 3.4, 3.7] : [3.3, 3.15, 3];
+    }
+    if (gear.top) {
+      appearance.robe = false;
+      appearance.shoulder = { plate: 3.2, tunic: 1.9, jacket: 2.45 }[gear.top];
+      appearance.chest = { plate: 5.7, tunic: 4.4, jacket: 5 }[gear.top];
+    }
+    if (gear.cape) appearance.cloak = false;
+    if (gear.weapon) {
+      appearance.weapon = gear.weapon === "none" ? undefined : {
+        weapon: gear.weapon, sa: gear.weapon === "bow" ? 0.1 : -0.68, wl: 0.82,
+      };
+    }
+  }
   const rest = posed(STAND, appearance);
+  const x = customized ? Math.min(-12, rest.x0) : -12;
+  const y = customized ? Math.min(-38, rest.y0) : -38;
+  const w = (customized ? Math.max(12, rest.x1 + 1) : 12) - x;
+  const h = (customized ? Math.max(0, rest.y1 + 1) : 0) - y;
+  if (customized) appearance.bounds = { x, y, w, h };
+  const pixels = new Uint32Array(w * h), data = new Uint8Array(w * h);
   for (let i = 0; i < rest.n; i++) {
     const col = rest.xs[i] - x, row = rest.ys[i] - y;
     if (col < 0 || col >= w || row < 0 || row >= h) continue;
@@ -68,9 +118,13 @@ export function createCharacter({ style, seed = 1 } = {}) {
     data[row * w + col] = 1;
   }
   const eyes = [];
-  for (let row = 2; row < 6 && !eyes.length; row++)
-    for (let col = 12; col < w - 1; col++)
-      if (appearance.trim.includes(pixels[row * w + col] | 0) && data[(row + 1) * w + col]) eyes.push([col, row]);
-  return { w, h, x, y, k: 2, mask: { w, h, data }, pixels, head: [0, rest.y0],
-    chest: [0, -26], eyes, appearance, style, seed };
+  if (customized) {
+    for (const [ex, ey] of rest.eyes) eyes.push([ex - x, ey - y]);
+  } else {
+    for (let row = 2; row < 6 && !eyes.length; row++)
+      for (let col = 12; col < w - 1; col++)
+        if (appearance.trim.includes(pixels[row * w + col] | 0) && data[(row + 1) * w + col]) eyes.push([col, row]);
+  }
+  return { w, h, x, y, k: 2, mask: { w, h, data }, pixels, head: [0, customized ? rest.headY : rest.y0],
+    chest: [0, -26], eyes, appearance, style, seed, ...(customized ? { equipment: gear } : {}) };
 }

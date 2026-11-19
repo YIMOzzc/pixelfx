@@ -5,8 +5,11 @@ import { createCharacter, createFrame, drawActor, painterFor, composite } from "
 import { ROOT, save } from "./lib/fxlib.mjs";
 import { encodePNG } from "./lib/png.mjs";
 
-const [style = "random", seed = "1", output] = process.argv.slice(2);
-const actor = createCharacter({ style: style === "random" ? undefined : style, seed: Number(seed) });
+const args = process.argv.slice(2);
+const equipmentFlag = args.indexOf("--equipment");
+const equipment = equipmentFlag < 0 ? undefined : JSON.parse(args.splice(equipmentFlag, 2)[1]);
+const [style = "random", seed = "1", output] = args;
+const actor = createCharacter({ style: style === "random" ? undefined : style, seed: Number(seed), equipment });
 const { w, h, x, y } = actor;
 const frame = createFrame(w, h);
 drawActor(painterFor(frame).place(-x, -y), actor);

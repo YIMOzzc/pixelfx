@@ -162,6 +162,12 @@ html:lang(zh) .section-head h2, html:lang(zh) .info h2 { font-family: var(--text
 .facts dt { color: var(--quiet); }
 .facts dd { margin: 0; font-variant-numeric: tabular-nums; }
 .controls { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+#d-equipment summary { cursor: pointer; font: 400 12px/1.5 var(--mono); }
+.equipment-editor { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 10px; align-items: start; margin: 8px 0; }
+#d-equipment-preview { display: block; width: 88px; height: 88px; image-rendering: pixelated; background: var(--panel, #171522); border-radius: 4px; }
+#d-equipment-slots { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(156px, 100%), 1fr)); gap: 6px 12px; }
+#d-equipment-slots .row { flex-wrap: nowrap; }
+#d-equipment-slots select { flex: 1; min-width: 0; }
 .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .row[hidden] { display: none; }
 #d-character-seed { width: 12ch; }

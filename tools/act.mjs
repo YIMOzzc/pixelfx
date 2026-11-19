@@ -6,7 +6,7 @@
 //   node tools/act.mjs melee/sword-slash --mp4          video: records/act/melee-sword-slash.mp4
 //   node tools/act.mjs melee/sword-slash --sheet        the whole act, character and all, as a transparent sprite sheet
 //
-// Options: --from S --to S (strip range) --step S (default 1/12) --cols N --zoom N --bg KIND --out FILE --no-target --seconds S --character STYLE --character-seed N
+// Options: --from S --to S (strip range) --step S (default 1/12) --cols N --zoom N --bg KIND --out FILE --no-target --seconds S --character STYLE --character-seed N --equipment JSON
 
 import { createCharacter } from "../src/core/index.js";
 import { join } from "node:path";
@@ -19,8 +19,12 @@ for (let i = 0; i < args.length; i++) {
   else pos.push(args[i]);
 }
 const ids = resolveIds(pos);
-const actor = flags.character !== undefined || flags["character-seed"] !== undefined
-  ? createCharacter({ style: flags.character === "random" ? undefined : flags.character, seed: +(flags["character-seed"] ?? 1) })
+const actor = flags.character !== undefined || flags["character-seed"] !== undefined || flags.equipment !== undefined
+  ? createCharacter({
+    style: flags.character === "random" ? undefined : flags.character,
+    seed: +(flags["character-seed"] ?? 1),
+    equipment: flags.equipment === undefined ? undefined : JSON.parse(flags.equipment),
+  })
   : undefined;
 const options = actor ? { actor } : undefined;
 for (const id of ids) {
@@ -28,7 +32,7 @@ for (const id of ids) {
   if (flags.sheet) {
     const r = renderAct(fx, { options, fps: fx.meta.fps, bg: "none", target: !flags["no-target"], hold: 0 }), name = id.split("/")[1], base = join(ROOT, "records", "act", id.replace("/", "-"));
     const s = spriteSheet(fx, r, name);
-    if (actor) s.json.meta.pixelfx.character = { style: actor.style, seed: actor.seed };
+    if (actor) s.json.meta.pixelfx.character = { style: actor.style, seed: actor.seed, equipment: actor.equipment };
     s.json.meta.pixelfx.pivot = r.pivot;
     save(`${base}.sheet.png`, s.png);
     save(`${base}.sheet.json`, JSON.stringify(s.json, null, 1));
